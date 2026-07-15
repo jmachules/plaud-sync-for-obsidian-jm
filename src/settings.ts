@@ -5,6 +5,7 @@ import {DEFAULT_SETTINGS} from './settings-schema';
 
 export class PlaudSettingTab extends PluginSettingTab {
 	plugin: PlaudSyncPlugin;
+	private bridgeSecretSetting: Setting | null = null;
 
 	constructor(app: App, plugin: PlaudSyncPlugin) {
 		super(app, plugin);
@@ -117,6 +118,53 @@ export class PlaudSettingTab extends PluginSettingTab {
 						: DEFAULT_SETTINGS.lastSyncAtMs;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName('Browser token bridge (desktop only)')
+			.setHeading()
+			.setDesc('Lets a companion browser extension push a freshly-refreshed Plaud token to this plugin '
+				+ 'automatically, so you don\'t have to paste one by hand. The listener only binds to 127.0.0.1 '
+				+ 'and requires the secret below on every request.');
+
+		new Setting(containerEl)
+			.setName('Enable browser token bridge')
+			.setDesc('Starts a local-only listener that accepts token updates from the browser extension.')
+			.addToggle((toggle) => toggle
+				.setValue(this.plugin.settings.bridgeEnabled)
+				.onChange(async (value) => {
+					await this.plugin.setBridgeEnabled(value);
+					await this.refreshBridgeSecretField();
+				}));
+
+		new Setting(containerEl)
+			.setName('Bridge port')
+			.setDesc('Local port the listener binds to. Toggle the bridge off and back on after changing this.')
+			.addText((text) => text
+				.setValue(String(this.plugin.settings.bridgePort))
+				.onChange(async (value) => {
+					const parsed = Number.parseInt(value, 10);
+					if (Number.isFinite(parsed) && parsed >= 1024 && parsed <= 65535) {
+						this.plugin.settings.bridgePort = parsed;
+						await this.plugin.saveSettings();
+					}
+				}));
+
+		this.bridgeSecretSetting = new Setting(containerEl)
+			.setName('Bridge secret')
+			.setDesc('Paste this into the browser extension\'s options page. Regenerating invalidates the old value everywhere.')
+			.addButton((button) => button
+				.setButtonText('Regenerate')
+				.onClick(async () => {
+					await this.plugin.regenerateBridgeSecret();
+					new Notice('Bridge secret regenerated. Update the browser extension with the new value.');
+					await this.refreshBridgeSecretField();
+				}));
+
+		void this.refreshBridgeSecretField();
+
+		containerEl.createEl('p', {
+			text: `Endpoint the extension posts to: http://127.0.0.1:${this.plugin.settings.bridgePort}/token`
+		});
 	}
 
 	private async refreshTokenStatus(statusSetting: Setting): Promise<void> {
@@ -125,6 +173,17 @@ export class PlaudSettingTab extends PluginSettingTab {
 			token
 				? 'Plaud token configured. Use Validate token command to confirm access.'
 				: 'Plaud token missing. Paste your token above to enable sync.'
+		);
+	}
+
+	private async refreshBridgeSecretField(): Promise<void> {
+		if (!this.bridgeSecretSetting) {
+			return;
+		}
+
+		const secret = await this.plugin.ensureBridgeSecret();
+		this.bridgeSecretSetting.setDesc(
+			`Paste this into the browser extension's options page: ${secret}`
 		);
 	}
 }

@@ -5,6 +5,8 @@ export interface PlaudPluginSettings {
 	updateExisting: boolean;
 	filenamePattern: string;
 	lastSyncAtMs: number;
+	bridgeEnabled: boolean;
+	bridgePort: number;
 }
 
 export const DEFAULT_SETTINGS: PlaudPluginSettings = {
@@ -13,7 +15,9 @@ export const DEFAULT_SETTINGS: PlaudPluginSettings = {
 	syncOnStartup: true,
 	updateExisting: true,
 	filenamePattern: 'plaud-{date}-{title}',
-	lastSyncAtMs: 0
+	lastSyncAtMs: 0,
+	bridgeEnabled: false,
+	bridgePort: 8765
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -41,6 +45,15 @@ function readTimestampMs(value: unknown, fallback: number): number {
 	return Math.floor(value);
 }
 
+function readPort(value: unknown, fallback: number): number {
+	if (typeof value !== 'number' || !Number.isFinite(value)) {
+		return fallback;
+	}
+
+	const rounded = Math.floor(value);
+	return rounded >= 1024 && rounded <= 65535 ? rounded : fallback;
+}
+
 export function normalizeSettings(raw: unknown): PlaudPluginSettings {
 	const persisted = isRecord(raw) ? raw : {};
 
@@ -50,7 +63,9 @@ export function normalizeSettings(raw: unknown): PlaudPluginSettings {
 		syncOnStartup: readBoolean(persisted.syncOnStartup, DEFAULT_SETTINGS.syncOnStartup),
 		updateExisting: readBoolean(persisted.updateExisting, DEFAULT_SETTINGS.updateExisting),
 		filenamePattern: readString(persisted.filenamePattern, DEFAULT_SETTINGS.filenamePattern),
-		lastSyncAtMs: readTimestampMs(persisted.lastSyncAtMs, DEFAULT_SETTINGS.lastSyncAtMs)
+		lastSyncAtMs: readTimestampMs(persisted.lastSyncAtMs, DEFAULT_SETTINGS.lastSyncAtMs),
+		bridgeEnabled: readBoolean(persisted.bridgeEnabled, DEFAULT_SETTINGS.bridgeEnabled),
+		bridgePort: readPort(persisted.bridgePort, DEFAULT_SETTINGS.bridgePort)
 	};
 }
 

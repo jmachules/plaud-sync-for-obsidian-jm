@@ -1,10 +1,10 @@
-import {Notice, Plugin, requestUrl, TFile} from 'obsidian';
+import {Notice, Platform, Plugin, requestUrl, TFile} from 'obsidian';
 import {registerPlaudCommands} from './commands';
 import {type PlaudPluginSettings, normalizeSettings, toPersistedSettings} from './settings-schema';
 import {PlaudSettingTab} from './settings';
 import {createPlaudSyncRuntime, type PlaudSyncRuntime, type SyncTrigger} from './sync-runtime';
 import {createObsidianPlaudApiClient} from './plaud-api-obsidian';
-import {getPlaudToken} from './secret-store';
+import {getBridgeSecret, getPlaudToken, setBridgeSecret, setPlaudToken} from './secret-store';
 import {normalizePlaudDetail} from './plaud-normalizer';
 import {renderPlaudMarkdown} from './plaud-renderer';
 import {isTrashedFile, runPlaudSync, type PlaudSyncSummary} from './plaud-sync';
@@ -12,6 +12,7 @@ import {type PlaudVaultAdapter, upsertPlaudNote} from './plaud-vault';
 import {PlaudApiError, type PlaudApiClient, type PlaudFileDetail} from './plaud-api';
 import {DEFAULT_RETRY_POLICY, sanitizeTelemetryMessage, type RetryTelemetryEvent, withRetry} from './plaud-retry';
 import {hydratePlaudDetailContent} from './plaud-content-hydrator';
+import {createTokenBridgeServer, generateBridgeSecret, type TokenBridgeServer} from './token-bridge-server';
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message.trim().length > 0) {
@@ -50,6 +51,7 @@ function formatSyncSummary(summary: PlaudSyncSummary): string {
 export default class PlaudSyncPlugin extends Plugin {
 	settings: PlaudPluginSettings;
 	private syncRuntime: PlaudSyncRuntime | null = null;
+	private tokenBridgeServer: TokenBridgeServer | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -65,6 +67,90 @@ export default class PlaudSyncPlugin extends Plugin {
 		this.addSettingTab(new PlaudSettingTab(this.app, this));
 
 		void this.syncRuntime.runStartupSync();
+
+		if (this.settings.bridgeEnabled) {
+			await this.startTokenBridge();
+		}
+	}
+
+	onunload(): void {
+		void this.stopTokenBridge();
+	}
+
+	async ensureBridgeSecret(): Promise<string> {
+		const existing = await getBridgeSecret(this.app);
+		if (existing) {
+			return existing;
+		}
+
+		const generated = generateBridgeSecret();
+		await setBridgeSecret(this.app, generated);
+		return generated;
+	}
+
+	async regenerateBridgeSecret(): Promise<string> {
+		const generated = generateBridgeSecret();
+		await setBridgeSecret(this.app, generated);
+
+		if (this.tokenBridgeServer) {
+			await this.stopTokenBridge();
+			await this.startTokenBridge();
+		}
+
+		return generated;
+	}
+
+	async setBridgeEnabled(enabled: boolean): Promise<void> {
+		this.settings.bridgeEnabled = enabled;
+		await this.saveSettings();
+
+		if (enabled) {
+			await this.startTokenBridge();
+		} else {
+			await this.stopTokenBridge();
+		}
+	}
+
+	async startTokenBridge(): Promise<void> {
+		if (this.tokenBridgeServer) {
+			return;
+		}
+
+		if (!Platform.isDesktopApp) {
+			new Notice('Plaud browser token bridge is desktop-only.');
+			return;
+		}
+
+		const secret = await this.ensureBridgeSecret();
+		const server = createTokenBridgeServer({
+			port: this.settings.bridgePort,
+			secret,
+			onToken: async (payload) => {
+				await setPlaudToken(this.app, payload.token);
+				new Notice('Plaud token updated via browser bridge.');
+			},
+			onLog: (message) => {
+				console.warn('[plaud-sync] bridge', message);
+			}
+		});
+
+		try {
+			await server.start();
+			this.tokenBridgeServer = server;
+		} catch (error) {
+			this.logFailure('token_bridge_start_failed', error);
+			new Notice(`Plaud token bridge failed to start on port ${this.settings.bridgePort}: ${toErrorMessage(error)}`);
+		}
+	}
+
+	async stopTokenBridge(): Promise<void> {
+		if (!this.tokenBridgeServer) {
+			return;
+		}
+
+		const server = this.tokenBridgeServer;
+		this.tokenBridgeServer = null;
+		await server.stop();
 	}
 
 	async loadSettings(): Promise<void> {

@@ -10,7 +10,8 @@ const schemaModuleUrl = pathToFileURL(path.join(root, 'src/settings-schema.ts'))
 const {
   DEFAULT_SETTINGS,
   normalizeSettings,
-  toPersistedSettings
+  toPersistedSettings,
+  isValidBridgePort
 } = await import(schemaModuleUrl);
 
 const mainSource = fs.readFileSync(path.join(root, 'src/main.ts'), 'utf8');
@@ -59,10 +60,36 @@ test('normalizeSettings protects against malformed persisted values', () => {
     syncOnStartup: 'yes',
     updateExisting: null,
     filenamePattern: '',
-    lastSyncAtMs: -100
+    lastSyncAtMs: -100,
+    bridgeEnabled: 'yes',
+    bridgePort: 99999
   });
 
   assert.deepEqual(merged, DEFAULT_SETTINGS);
+});
+
+test('normalizeSettings rejects out-of-range or non-numeric bridge ports', () => {
+  assert.equal(normalizeSettings({bridgePort: 80}).bridgePort, DEFAULT_SETTINGS.bridgePort);
+  assert.equal(normalizeSettings({bridgePort: 70000}).bridgePort, DEFAULT_SETTINGS.bridgePort);
+  assert.equal(normalizeSettings({bridgePort: 'abc'}).bridgePort, DEFAULT_SETTINGS.bridgePort);
+  assert.equal(normalizeSettings({bridgePort: 1023}).bridgePort, DEFAULT_SETTINGS.bridgePort);
+  assert.equal(normalizeSettings({bridgePort: 65536}).bridgePort, DEFAULT_SETTINGS.bridgePort);
+  assert.equal(normalizeSettings({bridgePort: 12345}).bridgePort, 12345);
+});
+
+test('normalizeSettings coerces a non-boolean bridgeEnabled to the default', () => {
+  assert.equal(normalizeSettings({bridgeEnabled: 'true'}).bridgeEnabled, DEFAULT_SETTINGS.bridgeEnabled);
+  assert.equal(normalizeSettings({bridgeEnabled: 1}).bridgeEnabled, DEFAULT_SETTINGS.bridgeEnabled);
+  assert.equal(normalizeSettings({bridgeEnabled: true}).bridgeEnabled, true);
+});
+
+test('isValidBridgePort enforces the 1024-65535 range on integers only', () => {
+  assert.equal(isValidBridgePort(8765), true);
+  assert.equal(isValidBridgePort(1024), true);
+  assert.equal(isValidBridgePort(65535), true);
+  assert.equal(isValidBridgePort(1023), false);
+  assert.equal(isValidBridgePort(65536), false);
+  assert.equal(isValidBridgePort(8765.5), false);
 });
 
 test('toPersistedSettings preserves explicit lastSyncAtMs checkpoint semantics', () => {

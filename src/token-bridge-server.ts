@@ -20,6 +20,8 @@ export interface TokenBridgeServer {
 
 const MAX_BODY_BYTES = 8192;
 
+class BodyTooLargeError extends Error {}
+
 function safeEqual(a: string, b: string): boolean {
 	const bufA = Buffer.from(a);
 	const bufB = Buffer.from(b);
@@ -37,18 +39,27 @@ export function generateBridgeSecret(): string {
 function readBody(req: IncomingMessage): Promise<string> {
 	return new Promise((resolve, reject) => {
 		let size = 0;
+		let tooLarge = false;
 		const chunks: Buffer[] = [];
 
 		req.on('data', (chunk: Buffer) => {
+			if (tooLarge) {
+				return;
+			}
+
 			size += chunk.length;
 			if (size > MAX_BODY_BYTES) {
-				reject(new Error('Request body too large.'));
-				req.destroy();
+				tooLarge = true;
+				reject(new BodyTooLargeError('Request body too large.'));
 				return;
 			}
 			chunks.push(chunk);
 		});
-		req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+		req.on('end', () => {
+			if (!tooLarge) {
+				resolve(Buffer.concat(chunks).toString('utf8'));
+			}
+		});
 		req.on('error', reject);
 	});
 }
@@ -60,6 +71,12 @@ function sendJson(res: ServerResponse, status: number, body: Record<string, unkn
 		'Content-Length': Buffer.byteLength(payload)
 	});
 	res.end(payload);
+}
+
+function sendJsonAndClose(req: IncomingMessage, res: ServerResponse, status: number, body: Record<string, unknown>): void {
+	res.setHeader('Connection', 'close');
+	res.on('finish', () => req.destroy());
+	sendJson(res, status, body);
 }
 
 export function createTokenBridgeServer(options: TokenBridgeServerOptions): TokenBridgeServer {
@@ -99,6 +116,12 @@ export function createTokenBridgeServer(options: TokenBridgeServerOptions): Toke
 			await options.onToken({token, expiresAt});
 			sendJson(res, 200, {status: 'ok'});
 		} catch (error) {
+			if (error instanceof BodyTooLargeError) {
+				options.onLog?.('bridge request rejected: payload too large');
+				sendJsonAndClose(req, res, 413, {error: 'payload_too_large'});
+				return;
+			}
+
 			options.onLog?.(`bridge request failed: ${error instanceof Error ? error.message : 'unknown error'}`);
 			sendJson(res, 400, {error: 'bad_request'});
 		}
@@ -119,6 +142,9 @@ export function createTokenBridgeServer(options: TokenBridgeServerOptions): Toke
 				instance.once('error', onError);
 				instance.listen(options.port, '127.0.0.1', () => {
 					instance.removeListener('error', onError);
+					instance.on('error', (error) => {
+						options.onLog?.(`token bridge server error: ${error.message}`);
+					});
 					server = instance;
 					resolve();
 				});

@@ -45,13 +45,17 @@ function readTimestampMs(value: unknown, fallback: number): number {
 	return Math.floor(value);
 }
 
+export function isValidBridgePort(value: number): boolean {
+	return Number.isInteger(value) && value >= 1024 && value <= 65535;
+}
+
 function readPort(value: unknown, fallback: number): number {
 	if (typeof value !== 'number' || !Number.isFinite(value)) {
 		return fallback;
 	}
 
 	const rounded = Math.floor(value);
-	return rounded >= 1024 && rounded <= 65535 ? rounded : fallback;
+	return isValidBridgePort(rounded) ? rounded : fallback;
 }
 
 export function normalizeSettings(raw: unknown): PlaudPluginSettings {

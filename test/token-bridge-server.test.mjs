@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import process from 'node:process';
+import fs from 'node:fs';
 import {pathToFileURL} from 'node:url';
 
 const root = process.cwd();
 const moduleUrl = pathToFileURL(path.join(root, 'src/token-bridge-server.ts')).href;
 const {createTokenBridgeServer, generateBridgeSecret} = await import(moduleUrl);
+const serverSource = fs.readFileSync(path.join(root, 'src/token-bridge-server.ts'), 'utf8');
 
 async function withServer(options, run) {
   const received = [];
@@ -108,6 +110,25 @@ test('rejects unknown routes and methods', async () => {
   });
 });
 
+test('oversized request bodies get a structured 413 response instead of a connection reset', async () => {
+  const port = 18770;
+  const secret = 'test-secret-value';
+
+  await withServer({port, secret}, async (received) => {
+    const oversizedBody = JSON.stringify({token: 'x'.repeat(9000)});
+
+    const response = await fetch(`http://127.0.0.1:${port}/token`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'x-bridge-secret': secret},
+      body: oversizedBody
+    });
+
+    assert.equal(response.status, 413);
+    assert.deepEqual(await response.json(), {error: 'payload_too_large'});
+    assert.equal(received.length, 0);
+  });
+});
+
 test('stop() is idempotent and frees the port for a subsequent start()', async () => {
   const port = 18769;
   const secret = 'test-secret-value';
@@ -120,4 +141,10 @@ test('stop() is idempotent and frees the port for a subsequent start()', async (
   const server2 = createTokenBridgeServer({port, secret, onToken: async () => {}});
   await server2.start();
   await server2.stop();
+});
+
+test('a permanent error listener is attached after start() resolves, so a later server error cannot crash the process', () => {
+  const startMatch = serverSource.match(/instance\.listen\([^]*?\}\);\s*\}\);/);
+  assert.ok(startMatch, 'expected to find the listen(...) callback body in token-bridge-server.ts');
+  assert.match(startMatch[0], /instance\.on\('error',/);
 });

@@ -1,11 +1,12 @@
 import {App, Notice, PluginSettingTab, Setting} from 'obsidian';
 import type PlaudSyncPlugin from './main';
 import {clearPlaudToken, getPlaudToken, setPlaudToken} from './secret-store';
-import {DEFAULT_SETTINGS} from './settings-schema';
+import {DEFAULT_SETTINGS, isValidBridgePort} from './settings-schema';
 
 export class PlaudSettingTab extends PluginSettingTab {
 	plugin: PlaudSyncPlugin;
 	private bridgeSecretSetting: Setting | null = null;
+	private bridgeStatusSetting: Setting | null = null;
 
 	constructor(app: App, plugin: PlaudSyncPlugin) {
 		super(app, plugin);
@@ -126,6 +127,10 @@ export class PlaudSettingTab extends PluginSettingTab {
 				+ 'automatically, so you don\'t have to paste one by hand. The listener only binds to 127.0.0.1 '
 				+ 'and requires the secret below on every request.');
 
+		this.bridgeStatusSetting = new Setting(containerEl)
+			.setName('Bridge status')
+			.setDesc('Checking bridge status...');
+
 		new Setting(containerEl)
 			.setName('Enable browser token bridge')
 			.setDesc('Starts a local-only listener that accepts token updates from the browser extension.')
@@ -134,20 +139,26 @@ export class PlaudSettingTab extends PluginSettingTab {
 				.onChange(async (value) => {
 					await this.plugin.setBridgeEnabled(value);
 					await this.refreshBridgeSecretField();
+					this.refreshBridgeStatus();
 				}));
 
 		new Setting(containerEl)
 			.setName('Bridge port')
 			.setDesc('Local port the listener binds to. Toggle the bridge off and back on after changing this.')
-			.addText((text) => text
-				.setValue(String(this.plugin.settings.bridgePort))
-				.onChange(async (value) => {
+			.addText((text) => {
+				text.setValue(String(this.plugin.settings.bridgePort));
+				text.onChange(async (value) => {
 					const parsed = Number.parseInt(value, 10);
-					if (Number.isFinite(parsed) && parsed >= 1024 && parsed <= 65535) {
+					if (isValidBridgePort(parsed)) {
 						this.plugin.settings.bridgePort = parsed;
 						await this.plugin.saveSettings();
+						return;
 					}
-				}));
+
+					new Notice('Bridge port must be a number between 1024 and 65535.');
+					text.setValue(String(this.plugin.settings.bridgePort));
+				});
+			});
 
 		this.bridgeSecretSetting = new Setting(containerEl)
 			.setName('Bridge secret')
@@ -158,9 +169,11 @@ export class PlaudSettingTab extends PluginSettingTab {
 					await this.plugin.regenerateBridgeSecret();
 					new Notice('Bridge secret regenerated. Update the browser extension with the new value.');
 					await this.refreshBridgeSecretField();
+					this.refreshBridgeStatus();
 				}));
 
 		void this.refreshBridgeSecretField();
+		this.refreshBridgeStatus();
 
 		containerEl.createEl('p', {
 			text: `Endpoint the extension posts to: http://127.0.0.1:${this.plugin.settings.bridgePort}/token`
@@ -173,6 +186,29 @@ export class PlaudSettingTab extends PluginSettingTab {
 			token
 				? 'Plaud token configured. Use Validate token command to confirm access.'
 				: 'Plaud token missing. Paste your token above to enable sync.'
+		);
+	}
+
+	private refreshBridgeStatus(): void {
+		if (!this.bridgeStatusSetting) {
+			return;
+		}
+
+		const status = this.plugin.getBridgeStatus();
+		if (!status.enabled) {
+			this.bridgeStatusSetting.setDesc('Disabled.');
+			return;
+		}
+
+		if (status.running) {
+			this.bridgeStatusSetting.setDesc('Running.');
+			return;
+		}
+
+		this.bridgeStatusSetting.setDesc(
+			status.lastError
+				? `Enabled but not running: ${status.lastError}`
+				: 'Enabled but not running.'
 		);
 	}
 

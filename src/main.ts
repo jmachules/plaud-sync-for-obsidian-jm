@@ -12,7 +12,8 @@ import {type PlaudVaultAdapter, upsertPlaudNote} from './plaud-vault';
 import {PlaudApiError, type PlaudApiClient, type PlaudFileDetail} from './plaud-api';
 import {DEFAULT_RETRY_POLICY, sanitizeTelemetryMessage, type RetryTelemetryEvent, withRetry} from './plaud-retry';
 import {hydratePlaudDetailContent} from './plaud-content-hydrator';
-import {createTokenBridgeServer, generateBridgeSecret, type TokenBridgeServer} from './token-bridge-server';
+import {createTokenBridgeServer, generateBridgeSecret} from './token-bridge-server';
+import {createTokenBridgeRuntime, type TokenBridgeRuntime, type TokenBridgeStatus} from './token-bridge-runtime';
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error && error.message.trim().length > 0) {
@@ -51,7 +52,7 @@ function formatSyncSummary(summary: PlaudSyncSummary): string {
 export default class PlaudSyncPlugin extends Plugin {
 	settings: PlaudPluginSettings;
 	private syncRuntime: PlaudSyncRuntime | null = null;
-	private tokenBridgeServer: TokenBridgeServer | null = null;
+	private tokenBridgeRuntime: TokenBridgeRuntime | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -69,12 +70,12 @@ export default class PlaudSyncPlugin extends Plugin {
 		void this.syncRuntime.runStartupSync();
 
 		if (this.settings.bridgeEnabled) {
-			await this.startTokenBridge();
+			await this.ensureTokenBridgeRuntime().start();
 		}
 	}
 
 	onunload(): void {
-		void this.stopTokenBridge();
+		void this.tokenBridgeRuntime?.stop();
 	}
 
 	async ensureBridgeSecret(): Promise<string> {
@@ -89,68 +90,49 @@ export default class PlaudSyncPlugin extends Plugin {
 	}
 
 	async regenerateBridgeSecret(): Promise<string> {
-		const generated = generateBridgeSecret();
-		await setBridgeSecret(this.app, generated);
-
-		if (this.tokenBridgeServer) {
-			await this.stopTokenBridge();
-			await this.startTokenBridge();
-		}
-
-		return generated;
+		return this.ensureTokenBridgeRuntime().regenerateSecret();
 	}
 
 	async setBridgeEnabled(enabled: boolean): Promise<void> {
-		this.settings.bridgeEnabled = enabled;
-		await this.saveSettings();
-
-		if (enabled) {
-			await this.startTokenBridge();
-		} else {
-			await this.stopTokenBridge();
-		}
+		await this.ensureTokenBridgeRuntime().setEnabled(enabled);
 	}
 
-	async startTokenBridge(): Promise<void> {
-		if (this.tokenBridgeServer) {
-			return;
-		}
-
-		if (!Platform.isDesktopApp) {
-			new Notice('Plaud browser token bridge is desktop-only.');
-			return;
-		}
-
-		const secret = await this.ensureBridgeSecret();
-		const server = createTokenBridgeServer({
-			port: this.settings.bridgePort,
-			secret,
-			onToken: async (payload) => {
-				await setPlaudToken(this.app, payload.token);
-				new Notice('Plaud token updated via browser bridge.');
-			},
-			onLog: (message) => {
-				console.warn('[plaud-sync] bridge', message);
-			}
-		});
-
-		try {
-			await server.start();
-			this.tokenBridgeServer = server;
-		} catch (error) {
-			this.logFailure('token_bridge_start_failed', error);
-			new Notice(`Plaud token bridge failed to start on port ${this.settings.bridgePort}: ${toErrorMessage(error)}`);
-		}
+	getBridgeStatus(): TokenBridgeStatus {
+		return this.ensureTokenBridgeRuntime().getStatus();
 	}
 
-	async stopTokenBridge(): Promise<void> {
-		if (!this.tokenBridgeServer) {
-			return;
+	private ensureTokenBridgeRuntime(): TokenBridgeRuntime {
+		if (!this.tokenBridgeRuntime) {
+			this.tokenBridgeRuntime = createTokenBridgeRuntime({
+				getBridgeEnabled: () => this.settings.bridgeEnabled,
+				getBridgePort: () => this.settings.bridgePort,
+				persistBridgeEnabled: async (enabled) => {
+					this.settings.bridgeEnabled = enabled;
+					await this.saveSettings();
+				},
+				ensureSecret: () => this.ensureBridgeSecret(),
+				regenerateSecret: async () => {
+					const generated = generateBridgeSecret();
+					await setBridgeSecret(this.app, generated);
+					return generated;
+				},
+				isDesktopApp: () => Platform.isDesktopApp,
+				createServer: createTokenBridgeServer,
+				onToken: async (payload) => {
+					// expiresAt is captured for a future expiry-aware refresh scheduler; not consumed yet.
+					await setPlaudToken(this.app, payload.token);
+					new Notice('Plaud token updated via browser bridge.');
+				},
+				notify: (message) => {
+					new Notice(message);
+				},
+				log: (message) => {
+					console.warn('[plaud-sync] bridge', message);
+				}
+			});
 		}
 
-		const server = this.tokenBridgeServer;
-		this.tokenBridgeServer = null;
-		await server.stop();
+		return this.tokenBridgeRuntime;
 	}
 
 	async loadSettings(): Promise<void> {

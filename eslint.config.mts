@@ -35,6 +35,25 @@ export default tseslint.config(
 			'import/no-nodejs-modules': 'off',
 		},
 	},
+	{
+		// Encrypts the secret-storage fallback via @electron/remote's safeStorage (desktop-only,
+		// feature-detected at runtime -- see src/secret-store.ts). Needs the Buffer global.
+		files: ['src/secret-store.ts'],
+		languageOptions: {
+			globals: {
+				...globals.node,
+			},
+		},
+	},
+	{
+		// Test files run directly under Node (node --experimental-strip-types --test).
+		files: ['test/**/*.mjs'],
+		languageOptions: {
+			globals: {
+				...globals.node,
+			},
+		},
+	},
 	globalIgnores([
 		"node_modules",
 		"dist",

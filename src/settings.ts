@@ -1,6 +1,6 @@
 import {App, Notice, PluginSettingTab, Setting} from 'obsidian';
 import type PlaudSyncPlugin from './main';
-import {clearPlaudToken, getPlaudToken, setPlaudToken} from './secret-store';
+import {clearPlaudToken, getPlaudToken, isEncryptedStorageAvailable, setPlaudToken} from './secret-store';
 import {DEFAULT_SETTINGS, isValidBridgePort} from './settings-schema';
 
 export class PlaudSettingTab extends PluginSettingTab {
@@ -16,6 +16,18 @@ export class PlaudSettingTab extends PluginSettingTab {
 	display(): void {
 		const {containerEl} = this;
 		containerEl.empty();
+
+		const encryptionAvailable = isEncryptedStorageAvailable();
+		new Setting(containerEl)
+			.setName('Secret storage encryption')
+			.setDesc(
+				encryptionAvailable
+					? 'Available. Your Plaud token and bridge secret are encrypted with this OS user account\'s '
+						+ 'credential store before being written to local storage.'
+					: 'Unavailable in this runtime. Your Plaud token and bridge secret are being stored as '
+						+ 'plaintext in local storage. This is expected on mobile; on desktop it likely means '
+						+ 'Obsidian\'s bundled Electron no longer exposes @electron/remote\'s safeStorage API.'
+			);
 
 		const tokenStatusSetting = new Setting(containerEl)
 			.setName('Plaud token status')

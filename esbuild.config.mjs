@@ -20,6 +20,9 @@ const context = await esbuild.context({
 	external: [
 		"obsidian",
 		"electron",
+		// Not a declared dependency (see src/secret-store.ts) -- Obsidian's bundled
+		// Electron already provides it at runtime, same as "electron" above.
+		"@electron/remote",
 		"@codemirror/autocomplete",
 		"@codemirror/collab",
 		"@codemirror/commands",

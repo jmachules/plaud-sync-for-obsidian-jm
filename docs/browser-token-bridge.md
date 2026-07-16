@@ -304,6 +304,51 @@ via "Load unpacked" as described in section 5.
   grants the ability to *push* a token in, not read one out.
 - The extension has host permissions for exactly two origins
   (`web.plaud.ai`, `127.0.0.1`) — nothing else.
+- **Obsidian-side storage is encrypted at rest where the OS supports it
+  (fixed 2026-07, branch `fix/encrypt-secret-storage-fallback`).**
+  `src/secret-store.ts`'s documented first-choice path
+  (`app.getSecret`/`setSecret`/`deleteSecret`) is currently dead code — no
+  shipping Obsidian build implements it — so the Plaud token and the
+  bridge secret were both landing in `loadLocalStorage`/`saveLocalStorage`
+  as **plaintext**, readable directly from DevTools → Application → Local
+  Storage. This has been fixed: on desktop, before a value is written to
+  that fallback store, it's encrypted with
+  [`@electron/remote`](https://www.npmjs.com/package/@electron/remote)'s
+  `safeStorage` (Chromium's OS-backed credential store — Keychain on
+  macOS, DPAPI on Windows, libsecret on Linux). `@electron/remote` is
+  **not a declared dependency** — like `electron` itself, it's reached via
+  the Electron renderer's global `require(...)`, which Obsidian's own
+  bundled Electron already provides, so it doesn't need to ship inside
+  `main.js`. Every access is wrapped so a missing/broken module degrades
+  to the old plaintext behavior instead of crashing the plugin — and that
+  degraded state is no longer silent: it logs a `console.warn` and shows
+  a "Secret storage encryption: unavailable" line in Settings → Plaud
+  Sync, specifically so this doesn't ship unnoticed a second time. Any
+  plaintext value already sitting in storage from before this fix gets
+  migrated to an encrypted envelope automatically the next time it's
+  read (e.g. opening Settings → Plaud Sync) — no manual re-paste needed,
+  and it's a one-time upgrade, not a write on every read.
+  Practical implications:
+  - **Encrypted values are tied to the OS user account and machine that
+    encrypted them.** A value encrypted on, say, Matt's MacBook under
+    his OS login **will not decrypt** if the `data.json`/local-storage
+    file is copied to another machine or read under a different OS user
+    — `safeStorage.decryptString()` throws, which the plugin treats as
+    "can't read this" rather than crashing (you'd need to re-paste the
+    token / let the bridge re-push it).
+  - **This only fixes the Obsidian-side store.** The browser extension's
+    own secret storage — `chrome.storage.local` holding `{port, secret}`
+    in `options.js` (§4/§5 above) — is a separate store outside this
+    repo's control, and Chrome/Edge extension storage is not encrypted at
+    rest by the browser. That remains a known, accepted limitation; not
+    addressed by this fix.
+  - Mobile Obsidian has no Electron/`require`, so this is desktop-only by
+    construction — no separate `Platform.isDesktopApp` check was needed
+    to gate it; feature-detecting `require`/`@electron/remote` already
+    fails closed on mobile, and doing it that way (rather than importing
+    Obsidian's `Platform`) keeps `secret-store.ts` free of any Obsidian
+    import, which is what lets `test/secret-store.test.mjs` load and
+    exercise it directly under plain Node.
 - **Lesson from building this**: during the investigation that led here,
   live Plaud tokens, refresh tokens, and full cookie headers were
   accidentally pasted into chat multiple times while debugging in

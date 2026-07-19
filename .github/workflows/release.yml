@@ -26,12 +26,22 @@ jobs:
             - run: npm ci
             - run: npm run build
 
+            - name: Test and package browser extension
+              working-directory: browser-extension
+              run: |
+                  npm ci
+                  npm test
+                  zip -r ../plaud-token-bridge-extension.zip \
+                      manifest.json shared.js content-script.js background.js \
+                      options.html options.js README.md
+
             - name: Generate artifact attestations
               uses: actions/attest-build-provenance@v2
               with:
                   subject-path: |
                       main.js
                       styles.css
+                      plaud-token-bridge-extension.zip
 
             - name: Create release
               env:
@@ -41,4 +51,4 @@ jobs:
                   gh release create "$TAG" \
                       --title "$TAG" \
                       --generate-notes \
-                      main.js manifest.json styles.css
+                      main.js manifest.json styles.css plaud-token-bridge-extension.zip

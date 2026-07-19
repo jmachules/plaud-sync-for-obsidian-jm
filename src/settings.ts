@@ -2,6 +2,7 @@ import {App, Notice, PluginSettingTab, Setting} from 'obsidian';
 import type PlaudSyncPlugin from './main';
 import {clearPlaudToken, getPlaudToken, isEncryptedStorageAvailable, setPlaudToken} from './secret-store';
 import {DEFAULT_SETTINGS, isValidBridgePort} from './settings-schema';
+import {confirmPlaintextFallback} from './confirm-plaintext-modal';
 
 export class PlaudSettingTab extends PluginSettingTab {
 	plugin: PlaudSyncPlugin;
@@ -51,6 +52,14 @@ export class PlaudSettingTab extends PluginSettingTab {
 						await this.refreshTokenStatus(tokenStatusSetting);
 						new Notice('Plaud token cleared. Paste a token to enable API sync.');
 						return;
+					}
+
+					if (!isEncryptedStorageAvailable()) {
+						const proceed = await confirmPlaintextFallback(this.app, 'Plaud token');
+						if (!proceed) {
+							new Notice('Plaud token not saved.');
+							return;
+						}
 					}
 
 					try {
@@ -178,6 +187,14 @@ export class PlaudSettingTab extends PluginSettingTab {
 			.addButton((button) => button
 				.setButtonText('Regenerate')
 				.onClick(async () => {
+					if (!isEncryptedStorageAvailable()) {
+						const proceed = await confirmPlaintextFallback(this.app, 'bridge secret');
+						if (!proceed) {
+							new Notice('Bridge secret not regenerated.');
+							return;
+						}
+					}
+
 					await this.plugin.regenerateBridgeSecret();
 					new Notice('Bridge secret regenerated. Update the browser extension with the new value.');
 					await this.refreshBridgeSecretField();

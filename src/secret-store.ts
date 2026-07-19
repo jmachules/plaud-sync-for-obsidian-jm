@@ -142,6 +142,8 @@ async function getSecretValue(host: SecretStoreHost, key: string): Promise<strin
 			const safeStorage = getSafeStorage();
 			if (safeStorage) {
 				host.saveLocalStorage(`${key}.fallback`, encryptForStorage(safeStorage, normalized));
+			} else {
+				console.warn('[plaud-sync] secret-store: a legacy plaintext value was read but could not be migrated to encrypted storage because OS-level encryption is unavailable in this runtime; it remains plaintext on disk.');
 			}
 		}
 

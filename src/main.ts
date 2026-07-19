@@ -4,7 +4,7 @@ import {type PlaudPluginSettings, normalizeSettings, toPersistedSettings} from '
 import {PlaudSettingTab} from './settings';
 import {createPlaudSyncRuntime, type PlaudSyncRuntime, type SyncTrigger} from './sync-runtime';
 import {createObsidianPlaudApiClient} from './plaud-api-obsidian';
-import {getBridgeSecret, getPlaudToken, setBridgeSecret, setPlaudToken} from './secret-store';
+import {getBridgeSecret, getPlaudToken, isEncryptedStorageAvailable, setBridgeSecret, setPlaudToken} from './secret-store';
 import {normalizePlaudDetail} from './plaud-normalizer';
 import {renderPlaudMarkdown} from './plaud-renderer';
 import {isTrashedFile, runPlaudSync, type PlaudSyncSummary} from './plaud-sync';
@@ -67,11 +67,36 @@ export default class PlaudSyncPlugin extends Plugin {
 		registerPlaudCommands(this);
 		this.addSettingTab(new PlaudSettingTab(this.app, this));
 
+		await this.warnIfStoredSecretsAreUnencrypted();
+
 		void this.syncRuntime.runStartupSync();
 
 		if (this.settings.bridgeEnabled) {
 			await this.ensureTokenBridgeRuntime().start();
 		}
+	}
+
+	private async warnIfStoredSecretsAreUnencrypted(): Promise<void> {
+		if (isEncryptedStorageAvailable()) {
+			return;
+		}
+
+		const [token, bridgeSecret] = await Promise.all([
+			getPlaudToken(this.app),
+			getBridgeSecret(this.app)
+		]);
+
+		if (!token && !bridgeSecret) {
+			return;
+		}
+
+		console.warn('[plaud-sync] secret storage encryption is unavailable in this runtime; a previously '
+			+ 'stored Plaud token or bridge secret is plaintext on disk.');
+		new Notice(
+			'Plaud Sync: OS-level secret encryption is unavailable here, so your stored Plaud token / '
+				+ 'bridge secret are plaintext on disk. See Settings -> Plaud Sync for details.',
+			15000
+		);
 	}
 
 	onunload(): void {
@@ -121,7 +146,20 @@ export default class PlaudSyncPlugin extends Plugin {
 				onToken: async (payload) => {
 					// expiresAt is captured for a future expiry-aware refresh scheduler; not consumed yet.
 					await setPlaudToken(this.app, payload.token);
-					new Notice('Plaud token updated via browser bridge.');
+					// This push is unattended (triggered by the browser extension, not a user click), so
+					// unlike the settings-tab writes there's no one present to gate with a confirm modal --
+					// blocking here would just silently break the bridge's whole point. Surface it loudly
+					// instead of the settings-tab-only indicator, so a plaintext write on a headless machine
+					// still gets seen.
+					if (isEncryptedStorageAvailable()) {
+						new Notice('Plaud token updated via browser bridge.');
+					} else {
+						new Notice(
+							'Plaud token updated via browser bridge. Stored as plaintext because OS-level '
+								+ 'encryption is unavailable here.',
+							10000
+						);
+					}
 				},
 				notify: (message) => {
 					new Notice(message);

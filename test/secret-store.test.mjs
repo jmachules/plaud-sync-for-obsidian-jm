@@ -286,15 +286,20 @@ test('reading a legacy plaintext value migrates it to an encrypted envelope in p
   );
 });
 
-test('reading a legacy plaintext value does not attempt migration when safeStorage is unavailable', async () => {
+test('reading a legacy plaintext value does not attempt migration when safeStorage is unavailable', async (t) => {
   const host = makeLocalStorageHost();
   host.kv.set(`${PLAUD_TOKEN_SECRET_KEY}.fallback`, 'tok_stays_plaintext');
+  const warnMock = t.mock.method(console, 'warn');
 
   assert.equal(await getPlaudToken(host), 'tok_stays_plaintext');
   assert.equal(
     host.kv.get(`${PLAUD_TOKEN_SECRET_KEY}.fallback`),
     'tok_stays_plaintext',
     'no require() global means no migration should be attempted, and the value must be unchanged'
+  );
+  assert.ok(
+    warnMock.mock.callCount() > 0,
+    'an un-migratable legacy plaintext read must not be silent -- it should warn like the write-path fallback does'
   );
 });
 

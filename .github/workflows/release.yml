@@ -29,7 +29,6 @@ jobs:
             - name: Test and package browser extension
               working-directory: browser-extension
               run: |
-                  npm ci
                   npm test
                   zip -r ../plaud-token-bridge-extension.zip \
                       manifest.json shared.js content-script.js background.js \

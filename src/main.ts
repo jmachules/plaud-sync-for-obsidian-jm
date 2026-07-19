@@ -109,8 +109,19 @@ export default class PlaudSyncPlugin extends Plugin {
 			return existing;
 		}
 
+		// This can fire just from opening the settings tab (no explicit user "save" action), so it
+		// gets the same unattended-write treatment as the bridge auto-push in onToken below: a loud
+		// Notice instead of a blocking confirm modal, so it doesn't ambush someone who only wanted
+		// to look at settings.
 		const generated = generateBridgeSecret();
 		await setBridgeSecret(this.app, generated);
+		if (!isEncryptedStorageAvailable()) {
+			new Notice(
+				'Plaud Sync: generated a new bridge secret. Stored as plaintext because OS-level '
+					+ 'encryption is unavailable here.',
+				10000
+			);
+		}
 		return generated;
 	}
 

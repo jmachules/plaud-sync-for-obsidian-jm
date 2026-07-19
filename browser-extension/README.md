@@ -35,6 +35,11 @@ ambiguous-workspace detection, every `pushToken()` outcome (`ok`/`not_configured
 5. Open the extension's options page (click its toolbar icon -- pin it via the puzzle-piece menu
    if it's hidden -- or Extensions page -> Plaud Token Bridge -> **Extension options**).
 6. Paste the **port** and **secret** from step 1 -> **Save**.
+   **The Bridge port field shows `8765` as gray placeholder text, not a real value** -- even
+   though it matches the actual default port, that gray text is not actually in the field. You
+   must click in and type the port yourself, or **Save** will fail with "Port must be a number
+   between 1024 and 65535." (confirmed live: this is exactly what happened during setup
+   verification).
 7. Open (or reload) a `web.plaud.ai` tab where you're already logged in. Leave it open -- it
    doesn't need to be focused, just loaded.
 8. Wait up to ~60s, then re-check the options page. It should show `Last push: ok at <timestamp>`.

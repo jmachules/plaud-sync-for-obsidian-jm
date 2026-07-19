@@ -251,6 +251,12 @@ validates the extension the same way it validates the plugin.
    or go back to the extensions page → Plaud Token Bridge → **Extension
    options**).
 7. Paste the **port** and **secret** from step 2 → click **Save**.
+   ⚠️ **The Bridge port field shows `8765` as gray placeholder text, not an
+   actual value** — even though it matches the real default, that text isn't
+   really in the field. Click in and type the port yourself, or **Save**
+   fails with "Port must be a number between 1024 and 65535." (This is a
+   confirmed live gotcha from setup verification on 2026-07-19, not
+   hypothetical — it's exactly what happened the first time.)
 8. Open (or reload) a `web.plaud.ai` tab where you're already logged in.
    Leave it open — it doesn't need to be focused, just loaded.
 9. Wait up to ~60 seconds, then re-check the extension's options page. It
@@ -304,6 +310,7 @@ npm test                # should show 49 passing, zero dependencies
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
+| Save fails with "Port must be a number between 1024 and 65535" even though the port field visibly shows `8765` | That `8765` is gray placeholder text, not a real value — nothing was actually typed into the field | Click into the Bridge port field and type the port yourself before Save |
 | Extension options page shows `not_configured` | Secret field empty in extension options | Paste the secret from Obsidian settings, Save |
 | Extension options page shows `http_401` | Secret mismatch (e.g. after a Regenerate in Obsidian) | Re-copy the current secret from Obsidian into the extension options |
 | Extension options page shows `network_error` | Obsidian not running, or bridge toggle is off, or port mismatch | Check Obsidian is open, bridge toggle is on, and the port matches on both sides |

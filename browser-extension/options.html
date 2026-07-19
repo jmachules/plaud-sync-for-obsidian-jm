@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Plaud Token Bridge</title>
+<style>
+	body {
+		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+		width: 340px;
+		padding: 16px;
+		color: #1a1a1a;
+	}
+	h1 {
+		font-size: 15px;
+		margin: 0 0 4px;
+	}
+	p.sub {
+		font-size: 12px;
+		color: #666;
+		margin: 0 0 12px;
+	}
+	label {
+		display: block;
+		font-size: 12px;
+		font-weight: 600;
+		margin: 12px 0 4px;
+	}
+	input {
+		width: 100%;
+		box-sizing: border-box;
+		padding: 6px 8px;
+		font-size: 13px;
+	}
+	button {
+		margin-top: 14px;
+		padding: 6px 14px;
+		font-size: 13px;
+		cursor: pointer;
+	}
+	#saved {
+		margin-left: 8px;
+		font-size: 12px;
+		color: #2a7a2a;
+		display: none;
+	}
+	#status {
+		margin-top: 16px;
+		padding: 10px;
+		border-radius: 6px;
+		background: #f0f0f0;
+		font-size: 12px;
+		line-height: 1.5;
+		word-break: break-word;
+	}
+</style>
+</head>
+<body>
+	<h1>Plaud Token Bridge</h1>
+	<p class="sub">Paste the port and secret from Obsidian Settings &rarr; Plaud Sync &rarr; Browser token bridge.</p>
+
+	<label for="port">Bridge port</label>
+	<input id="port" type="number" min="1024" max="65535" placeholder="8765">
+
+	<label for="secret">Bridge secret</label>
+	<input id="secret" type="text" placeholder="Paste the bridge secret">
+
+	<button id="save">Save</button>
+	<span id="saved">Saved.</span>
+
+	<div id="status">Checking status&hellip;</div>
+
+	<script src="shared.js"></script>
+	<script src="options.js"></script>
+</body>
+</html>

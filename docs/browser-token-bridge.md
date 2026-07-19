@@ -198,22 +198,36 @@ account-identifying — treat with the same "don't paste in chat" caution.
 Build verified: `npm run build` (tsc + esbuild) clean, `npm test` 61/61
 passing, `npm run lint` clean.
 
-### Extension (lives inside the vault, not the plugin repo)
+### Extension
 
-Location: `C:\Users\jmach\Sync\jmita\.obsidian\plugins\plaud-token-bridge-extension\`
+**Status as of 2026-07-19: lives in this repo, at `browser-extension/`.**
+The original extension described in the rest of this document (built on a
+Windows machine, at `C:\Users\jmach\Sync\jmita\.obsidian\plugins\plaud-token-bridge-extension\`)
+was never checked into version control anywhere and was lost — no copy of it
+was found on any machine or in any git history. `browser-extension/` is a
+full rewrite from this document's own spec (the localStorage shape in §3, the
+files table below, the security notes in §8), then taken through two rounds
+of independent code review (correctness + a manual click-through verification
+pass in a real Obsidian instance) and given a 49-test automated suite
+(`browser-extension/test/`, zero dependencies, loads the real source files
+into a Node `vm` sandbox with mocked `chrome`/`localStorage`/`fetch` APIs —
+see `browser-extension/README.md`). CI (`.github/workflows/browser-extension-ci.yml`)
+runs that suite on every push/PR that touches the folder; `.github/workflows/secret-scan.yml`
+runs `gitleaks` across the whole repo on every push/PR.
 
 | File | Purpose |
 |---|---|
 | `manifest.json` | Manifest V3. `host_permissions`: `*://web.plaud.ai/*`, `http://127.0.0.1/*`. `permissions`: `storage` only. |
-| `content-script.js` | Runs on `web.plaud.ai`, polls the `:workspaceList` localStorage key every 60s, messages background on change. |
-| `background.js` | Service worker; on message, reads `{port, secret}` from `chrome.storage.local` and POSTs to the local listener; records `lastStatus`/`lastStatusAt`/`lastError`. |
-| `options.html` / `options.js` | Configuration UI: port + secret fields, live status display. |
-| `README.md` | Quick-reference setup card (shorter version of section 5 below). |
+| `shared.js` | `MESSAGE_TYPE_TOKEN` and `isBridgeConfigured()`, loaded by all three of the files below (content_scripts array / `importScripts` / `<script src>`) so there's one definition instead of copies to keep in sync. |
+| `content-script.js` | Runs on `web.plaud.ai`, polls for a localStorage key ending in `:workspaceList` every 60s, messages background on a token or ambiguity change. |
+| `background.js` | Service worker; on message, reads `{port, secret}` from `chrome.storage.local` and POSTs to the local listener (5s timeout via `AbortController`); records `lastStatus`/`lastStatusAt`/`lastPushAmbiguous`. Reports the real push outcome back to the content script so a failed push gets retried instead of silently marked as sent. |
+| `options.html` / `options.js` | Configuration UI: port + secret fields, live status display via `chrome.storage.onChanged` (not polling). |
+| `test/` | 49 tests: parsing/dedup logic, every push outcome, the fetch timeout, options-page rendering, and manifest hardening checks (permission scope, no `eval`/`innerHTML`, no remote script loading). |
+| `README.md` | Setup steps (a shorter version of section 5 below) plus how to run the test suite. |
 
-This folder is **not** an Obsidian plugin — it's just stored under
-`.obsidian/plugins/` for convenience. Obsidian ignores it (no
-Obsidian-shaped `manifest.json` fields). It is loaded into the browser
-separately, as an unpacked extension.
+It's a real subfolder of this repo now, not a separate unpacked-only
+directory — `git clone` gets you both halves of the bridge together, and CI
+validates the extension the same way it validates the plugin.
 
 ---
 
@@ -231,8 +245,7 @@ separately, as an unpacked extension.
    - Edge: `edge://extensions`
    - Chrome: `chrome://extensions`
 4. Enable **Developer mode** (top-right toggle).
-5. Click **Load unpacked** → select
-   `C:\Users\jmach\Sync\jmita\.obsidian\plugins\plaud-token-bridge-extension`.
+5. Click **Load unpacked** → select this repo's `browser-extension/` folder.
 6. Open the extension's **options page** (click the extension's icon in
    the toolbar — pin it first via the puzzle-piece menu if it's hidden —
    or go back to the extensions page → Plaud Token Bridge → **Extension
@@ -276,8 +289,14 @@ styles.css    -> <vault>/.obsidian/plugins/plaud-sync/styles.css
 Reload Obsidian (or disable/re-enable the plugin under Settings →
 Community plugins) to pick up the new build.
 
-The extension needs no build step — it's plain JS/HTML, loaded directly
-via "Load unpacked" as described in section 5.
+The extension needs no build step — it's plain JS/HTML, loaded directly via
+"Load unpacked" (pointed at `browser-extension/`) as described in section 5.
+To run its own test suite:
+
+```bash
+cd browser-extension
+npm test                # should show 49 passing, zero dependencies
+```
 
 ---
 
@@ -338,10 +357,11 @@ via "Load unpacked" as described in section 5.
     token / let the bridge re-push it).
   - **This only fixes the Obsidian-side store.** The browser extension's
     own secret storage — `chrome.storage.local` holding `{port, secret}`
-    in `options.js` (§4/§5 above) — is a separate store outside this
-    repo's control, and Chrome/Edge extension storage is not encrypted at
-    rest by the browser. That remains a known, accepted limitation; not
-    addressed by this fix.
+    in `options.js` (§4/§5 above) — is a real repo file now (`browser-extension/`),
+    but the storage mechanism itself is entirely the browser's: Chrome/Edge
+    extension storage is not encrypted at rest, and there's no equivalent of
+    Electron's `safeStorage` available to a content script or service worker.
+    That remains a known, accepted limitation; not addressed by this fix.
   - Mobile Obsidian has no Electron/`require`, so this is desktop-only by
     construction — no separate `Platform.isDesktopApp` check was needed
     to gate it; feature-detecting `require`/`@electron/remote` already

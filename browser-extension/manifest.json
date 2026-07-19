@@ -1,0 +1,26 @@
+{
+	"manifest_version": 3,
+	"name": "Plaud Token Bridge",
+	"version": "1.0.0",
+	"description": "Reads the Plaud web app's own refreshed session token and pushes it to the local Plaud Sync Obsidian plugin.",
+	"permissions": ["storage"],
+	"host_permissions": [
+		"*://web.plaud.ai/*",
+		"http://127.0.0.1/*"
+	],
+	"background": {
+		"service_worker": "background.js"
+	},
+	"content_scripts": [
+		{
+			"matches": ["*://web.plaud.ai/*"],
+			"js": ["shared.js", "content-script.js"],
+			"run_at": "document_idle"
+		}
+	],
+	"options_page": "options.html",
+	"action": {
+		"default_title": "Plaud Token Bridge",
+		"default_popup": "options.html"
+	}
+}

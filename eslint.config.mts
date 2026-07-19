@@ -62,5 +62,8 @@ export default tseslint.config(
 		"version-bump.mjs",
 		"versions.json",
 		"main.js",
+		// A separate project (browser runtime, not the Obsidian/TypeScript one this config is
+		// for) with its own package.json/test suite -- see browser-extension/README.md.
+		"browser-extension",
 	]),
 );

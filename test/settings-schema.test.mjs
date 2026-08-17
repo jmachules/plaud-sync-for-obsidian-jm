@@ -112,3 +112,7 @@ test('toPersistedSettings preserves explicit lastSyncAtMs checkpoint semantics',
 test('plugin main wiring uses normalizeSettings during load path', () => {
   assert.match(mainSource, /this\.settings\s*=\s*normalizeSettings\(await this\.loadData\(\)\)/);
 });
+
+test('startup sync is deferred until the vault index is ready', () => {
+  assert.match(mainSource, /onLayoutReady\(\(\) => \{\s*void this\.ensureSyncRuntime\(\)\.runStartupSync\(\);/);
+});

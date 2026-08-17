@@ -70,7 +70,12 @@ export default class PlaudSyncPlugin extends Plugin {
 
 		await this.warnIfStoredSecretsAreUnencrypted();
 
-		void this.syncRuntime.runStartupSync();
+		// Defer the startup sync until the vault index is fully loaded — running it
+		// straight from onload races vault indexing, and reads of files outside the
+		// warm sync folder (e.g. the enrichment config note) can fail spuriously.
+		this.app.workspace.onLayoutReady(() => {
+			void this.ensureSyncRuntime().runStartupSync();
+		});
 
 		if (this.settings.bridgeEnabled) {
 			await this.ensureTokenBridgeRuntime().start();

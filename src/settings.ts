@@ -129,6 +129,18 @@ export class PlaudSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName('Enrichment config path')
+			.setDesc('Vault path of a note whose ```json block defines post-render enrichment '
+				+ '(field extraction, wikilinks, highlights). Leave empty to disable enrichment.')
+			.addText((text) => text
+				.setPlaceholder('e.g. decisions/enrichment-config.md')
+				.setValue(this.plugin.settings.enrichConfigPath)
+				.onChange(async (value) => {
+					this.plugin.settings.enrichConfigPath = value.trim();
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
 			.setName('Last sync checkpoint')
 			.setDesc('Unix timestamp in milliseconds for incremental sync state.')
 			.addText((text) => text

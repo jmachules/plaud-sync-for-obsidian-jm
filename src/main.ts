@@ -7,6 +7,7 @@ import {createObsidianPlaudApiClient} from './plaud-api-obsidian';
 import {getBridgeSecret, getPlaudToken, isEncryptedStorageAvailable, setBridgeSecret, setPlaudToken} from './secret-store';
 import {normalizePlaudDetail} from './plaud-normalizer';
 import {renderPlaudMarkdown} from './plaud-renderer';
+import {enrichMarkdown, parseEnrichSpec, type EnrichSpec} from './note-enricher';
 import {isTrashedFile, runPlaudSync, type PlaudSyncSummary} from './plaud-sync';
 import {type PlaudVaultAdapter, upsertPlaudNote} from './plaud-vault';
 import {PlaudApiError, type PlaudApiClient, type PlaudFileDetail} from './plaud-api';
@@ -270,9 +271,12 @@ export default class PlaudSyncPlugin extends Plugin {
 			}
 		};
 
+		const vault = this.createVaultAdapter();
+		const enrichSpec = await this.loadEnrichSpec(vault);
+
 		return runPlaudSync({
 			api: resilientApi,
-			vault: this.createVaultAdapter(),
+			vault,
 			settings: {
 				syncFolder: this.settings.syncFolder,
 				filenamePattern: this.settings.filenamePattern,
@@ -284,9 +288,30 @@ export default class PlaudSyncPlugin extends Plugin {
 				await this.saveSettings();
 			},
 			normalizeDetail: normalizePlaudDetail,
-			renderMarkdown: renderPlaudMarkdown,
+			renderMarkdown: (detail) => {
+				const markdown = renderPlaudMarkdown(detail);
+				return enrichSpec ? enrichMarkdown(markdown, enrichSpec) : markdown;
+			},
 			upsertNote: upsertPlaudNote
 		});
+	}
+
+	private async loadEnrichSpec(vault: PlaudVaultAdapter): Promise<EnrichSpec | null> {
+		const configPath = this.settings.enrichConfigPath;
+		if (!configPath) {
+			return null;
+		}
+
+		try {
+			const spec = parseEnrichSpec(await vault.read(configPath));
+			if (!spec) {
+				console.warn(`[plaud-sync] enrichment config at "${configPath}" is missing or invalid; enrichment disabled for this run.`);
+			}
+			return spec;
+		} catch {
+			console.warn(`[plaud-sync] enrichment config at "${configPath}" could not be read; enrichment disabled for this run.`);
+			return null;
+		}
 	}
 
 	private async retryApiCall<T>(operation: string, execute: () => Promise<T>): Promise<T> {

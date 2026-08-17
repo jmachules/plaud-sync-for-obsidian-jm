@@ -7,6 +7,8 @@ export interface PlaudPluginSettings {
 	lastSyncAtMs: number;
 	bridgeEnabled: boolean;
 	bridgePort: number;
+	/** Vault path of an enrichment config note. Empty (default) disables enrichment. */
+	enrichConfigPath: string;
 }
 
 export const DEFAULT_SETTINGS: PlaudPluginSettings = {
@@ -17,7 +19,8 @@ export const DEFAULT_SETTINGS: PlaudPluginSettings = {
 	filenamePattern: 'plaud-{date}-{title}',
 	lastSyncAtMs: 0,
 	bridgeEnabled: false,
-	bridgePort: 8765
+	bridgePort: 8765,
+	enrichConfigPath: ''
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,7 +72,10 @@ export function normalizeSettings(raw: unknown): PlaudPluginSettings {
 		filenamePattern: readString(persisted.filenamePattern, DEFAULT_SETTINGS.filenamePattern),
 		lastSyncAtMs: readTimestampMs(persisted.lastSyncAtMs, DEFAULT_SETTINGS.lastSyncAtMs),
 		bridgeEnabled: readBoolean(persisted.bridgeEnabled, DEFAULT_SETTINGS.bridgeEnabled),
-		bridgePort: readPort(persisted.bridgePort, DEFAULT_SETTINGS.bridgePort)
+		bridgePort: readPort(persisted.bridgePort, DEFAULT_SETTINGS.bridgePort),
+		enrichConfigPath: typeof persisted.enrichConfigPath === 'string'
+			? persisted.enrichConfigPath.trim()
+			: DEFAULT_SETTINGS.enrichConfigPath
 	};
 }
 

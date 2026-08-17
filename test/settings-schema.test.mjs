@@ -21,6 +21,7 @@ test('default settings expose full Plaud sync schema', () => {
     'apiDomain',
     'bridgeEnabled',
     'bridgePort',
+    'enrichConfigPath',
     'filenamePattern',
     'lastSyncAtMs',
     'syncFolder',
@@ -36,6 +37,13 @@ test('default settings expose full Plaud sync schema', () => {
   assert.equal(DEFAULT_SETTINGS.lastSyncAtMs, 0);
   assert.equal(DEFAULT_SETTINGS.bridgeEnabled, false);
   assert.equal(DEFAULT_SETTINGS.bridgePort, 8765);
+  assert.equal(DEFAULT_SETTINGS.enrichConfigPath, '');
+});
+
+test('normalizeSettings trims enrichConfigPath and defaults non-strings to disabled', () => {
+  assert.equal(normalizeSettings({enrichConfigPath: '  notes/config.md  '}).enrichConfigPath, 'notes/config.md');
+  assert.equal(normalizeSettings({enrichConfigPath: 42}).enrichConfigPath, '');
+  assert.equal(normalizeSettings({}).enrichConfigPath, '');
 });
 
 test('normalizeSettings merges persisted partial values with defaults', () => {

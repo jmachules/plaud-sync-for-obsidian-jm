@@ -15,12 +15,18 @@ function formatDuration(durationMs: number): string {
 }
 
 function normalizeTitle(title: string): string {
-	const trimmed = title.trim();
+	// Line terminators would break out of the quoted YAML scalar (and shift the
+	// frontmatter delimiter), so they are never allowed into the title.
+	const trimmed = title.replace(/[\r\n\u2028\u2029]+/g, ' ').trim();
 	return trimmed.length > 0 ? trimmed : 'Untitled recording';
 }
 
+function normalizeFileId(fileId: string): string {
+	return fileId.replace(/\s+/g, '');
+}
+
 function escapeFrontmatterValue(value: string): string {
-	return value.replace(/"/g, '\\"');
+	return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function renderHighlights(highlights: string[]): string {
@@ -42,7 +48,7 @@ export function renderPlaudMarkdown(detail: NormalizedPlaudDetail): string {
 		'---',
 		'source: plaud',
 		'type: recording',
-		`file_id: ${detail.fileId}`,
+		`file_id: ${normalizeFileId(detail.fileId)}`,
 		`title: "${escapeFrontmatterValue(title)}"`,
 		`date: ${date}`,
 		`duration: ${duration}`,

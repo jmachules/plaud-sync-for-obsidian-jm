@@ -19,10 +19,12 @@ function asString(value: unknown): string {
 }
 
 function stripMarkup(value: string): string {
+	// Collapse only spaces/tabs: newlines must survive so structured summaries
+	// (headings, bullet lists) keep their line layout in the rendered note.
 	return value
 		.replace(/<[^>]*>/g, ' ')
 		.replace(/!\[.*?\]\(.*?\)/g, ' ')
-		.replace(/\s+/g, ' ')
+		.replace(/[ \t]+/g, ' ')
 		.trim();
 }
 

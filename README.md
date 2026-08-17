@@ -14,6 +14,7 @@ Sync your [Plaud](https://plaud.ai/) voice recordings into Markdown notes inside
 - **Retry with backoff** — transient failures (network, rate-limit, 5xx) are retried automatically; permanent failures (auth, bad response) are surfaced immediately
 - **Trash filtering** — recordings you deleted in Plaud are automatically skipped
 - **Content hydration** — fetches full transcript and AI summary content from Plaud's signed URLs
+- **Optional template enrichment** — if your recordings follow a fixed summary template, a config note can drive deterministic frontmatter extraction, wikilinks, and highlights at sync time; see [Configuration](#post-render-enrichment-optional)
 
 ## Requirements
 
@@ -123,6 +124,42 @@ Open **Settings → Community plugins → Plaud Sync**:
 | Enable browser token bridge | `false` | Starts a loopback-only (`127.0.0.1`) listener that accepts token pushes from the browser extension — see [Installation](#2-install-the-browser-extension-recommended) |
 | Bridge port | `8765` | Local port the listener binds to |
 | Bridge secret | (generated) | Shared secret the extension must send with every push; shown here to paste into the extension's options page |
+| Enrichment config path | (empty) | Vault path of a note defining optional post-render enrichment; empty disables it — see below |
+
+### Post-render enrichment (optional)
+
+If your recordings follow a fixed note template (for example, a structured call-summary
+template configured in Plaud), the plugin can deterministically enrich each synced note at
+render time: extract labeled fields into YAML frontmatter, turn configured names into
+`[[wikilinks]]`, wrap configured phrases in `==highlights==`, and append a footer listing
+unanswered fields. It is pure pattern matching against your template — nothing is inferred,
+misconfigured or unexpected input leaves notes untouched, and notes that don't match the
+template are only stamped with a `note-kind` for triage.
+
+Point **Enrichment config path** at a vault note whose ```` ```json ```` block defines the
+template contract. Minimal example (placeholder values):
+
+```json
+{
+  "markers": ["Contact Profile", "## Engagement Details"],
+  "noteKind": "screening-call",
+  "nonNoteKind": "non-screening",
+  "gapToken": "NOT CAPTURED",
+  "fields": [
+    {"key": "contact-name", "label": "Name"},
+    {"key": "contact-email", "label": "Email"},
+    {"key": "conducted-by", "label": "Call conducted by", "link": "recruiters"}
+  ],
+  "recruiters": {"alex": "alex-doe"},
+  "clients": [{"slug": "acme-corp", "match": ["acme", "ACM"]}],
+  "footerTitle": "Note connections (added automatically at sync)"
+}
+```
+
+See `src/note-enricher.ts` for the full `EnrichSpec` contract (highlight phrases,
+value highlighting, static keys, gap reporting, and a routing-token context link).
+Link slugs are restricted to `a-z0-9-`; the config is capped at 64 KB; any validation
+failure disables enrichment for that run (with a console warning) rather than guessing.
 
 ## Usage
 

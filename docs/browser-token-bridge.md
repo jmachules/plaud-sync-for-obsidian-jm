@@ -201,8 +201,8 @@ passing, `npm run lint` clean.
 ### Extension
 
 **Status as of 2026-07-19: lives in this repo, at `browser-extension/`.**
-The original extension described in the rest of this document (built on a
-Windows machine, at `C:\Users\jmach\Sync\jmita\.obsidian\plugins\plaud-token-bridge-extension\`)
+The original extension described in the rest of this document (built inside a
+test vault's `.obsidian/plugins/plaud-token-bridge-extension/` folder)
 was never checked into version control anywhere and was lost — no copy of it
 was found on any machine or in any git history. `browser-extension/` is a
 full rewrite from this document's own spec (the localStorage shape in §3, the
